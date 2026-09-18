@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Backtest — XAU/USD Bot{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-[#141922] border border-neutral-800 rounded-xl p-4">
+    <div class="text-sm text-neutral-400 mb-3">Run a backtest</div>
+    <p class="text-xs text-neutral-500 mb-4">
+      Runs the exact same strategy/risk logic the live bot uses, replayed bar-by-bar against real historical
+      historical candles with no lookahead. This is the honest substitute for a claimed win-rate — trust these
+      numbers, not a marketing promise.
+    </p>
+    <div class="grid md:grid-cols-3 gap-3">
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Strategy</label>
+        <select id="bt-strategy" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm"></select>
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Timeframe</label>
+        <select id="bt-timeframe" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm">
+          <option value="15m">15m</option><option value="30m">30m</option><option value="1h">1h</option><option value="4h">4h</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Instrument</label>
+        <input id="bt-instrument" value="XAUUSD" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Start date</label>
+        <input id="bt-start" type="date" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">End date</label>
+        <input id="bt-end" type="date" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Initial balance ($)</label>
+        <input id="bt-balance" type="number" value="10000" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Risk per trade (%)</label>
+        <input id="bt-risk" type="number" step="0.1" value="1.0" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Max daily loss (%)</label>
+        <input id="bt-daily-loss" type="number" step="0.5" value="3.0" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Max concurrent positions</label>
+        <input id="bt-max-positions" type="number" value="1" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm" />
+      </div>
+    </div>
+    <p class="text-xs text-neutral-500 mt-4 mb-1">
+      Symbol specification — check yours in MT5 (Market Watch → right-click the symbol → Specification).
+      Wrong values here will still time trades correctly but misstate P&amp;L.
+    </p>
+    <div class="grid md:grid-cols-4 gap-3">
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Contract size (units/lot)</label>
+        <input id="bt-contract-size" type="number" value="100" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Min volume (lots)</label>
+        <input id="bt-min-volume" type="number" step="0.01" value="0.01" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Max volume (lots)</label>
+        <input id="bt-max-volume" type="number" value="100" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Volume step (lots)</label>
+        <input id="bt-volume-step" type="number" step="0.01" value="0.01" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm" />
+      </div>
+    </div>
+    <div class="mt-3">
+      <label class="block text-xs text-neutral-500 mb-1">Strategy params (JSON, optional overrides)</label>
+      <textarea id="bt-params" rows="4" class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-xs font-mono">{}</textarea>
+    </div>
+    <button onclick="runBacktest()" class="mt-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-black px-4 py-2 text-sm font-medium">Run backtest</button>
+    <p id="bt-status" class="text-xs text-neutral-500 mt-2"></p>
+  </div>
+
+  <div id="bt-results" class="hidden space-y-6">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div class="bg-[#141922] border border-neutral-800 rounded-xl p-4"><div class="text-xs text-neutral-500">Total trades</div><div id="res-trades" class="text-lg font-semibold mt-1">—</div></div>
+      <div class="bg-[#141922] border border-neutral-800 rounded-xl p-4"><div class="text-xs text-neutral-500">Win rate</div><div id="res-winrate" class="text-lg font-semibold mt-1">—</div></div>
+      <div class="bg-[#141922] border border-neutral-800 rounded-xl p-4"><div class="text-xs text-neutral-500">Max drawdown</div><div id="res-drawdown" class="text-lg font-semibold mt-1">—</div></div>
+      <div class="bg-[#141922] border border-neutral-800 rounded-xl p-4"><div class="text-xs text-neutral-500">Sharpe (daily, ann.)</div><div id="res-sharpe" class="text-lg font-semibold mt-1">—</div></div>
+      <div class="bg-[#141922] border border-neutral-800 rounded-xl p-4"><div class="text-xs text-neutral-500">Profit factor</div><div id="res-pf" class="text-lg font-semibold mt-1">—</div></div>
+    </div>
+    <div class="bg-[#141922] border border-neutral-800 rounded-xl p-4">
+      <div class="text-sm text-neutral-400 mb-2">Cumulative PnL (reconstructed from closed trades)</div>
+      <canvas id="bt-chart" height="80"></canvas>
+    </div>
+    <div class="bg-[#141922] border border-neutral-800 rounded-xl p-4">
+      <div class="text-sm text-neutral-400 mb-2">Trades</div>
+      <div id="bt-trades-table" class="text-sm text-neutral-500 max-h-96 overflow-y-auto"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/backtest.js"></script>
+{% endblock %}

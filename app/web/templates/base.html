@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}XAU/USD Bot{% endblock %}</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind = tailwind || {};
+  </script>
+  <style>
+    body { background-color: #0b0e14; color: #e6e8ec; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #2a2f3a; border-radius: 4px; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body class="min-h-screen font-sans antialiased">
+  {% if request.url.path != '/login' %}
+  <nav class="border-b border-neutral-800 bg-[#0f1319]">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-6">
+        <span class="font-semibold text-amber-400 tracking-tight">XAU/USD Bot</span>
+        <a href="/dashboard" class="text-sm text-neutral-400 hover:text-neutral-100">Dashboard</a>
+        <a href="/backtest" class="text-sm text-neutral-400 hover:text-neutral-100">Backtest</a>
+      </div>
+      <button onclick="logout()" class="text-sm text-neutral-400 hover:text-red-400">Log out</button>
+    </div>
+  </nav>
+  {% endif %}
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    {% block content %}{% endblock %}
+  </main>
+  <script>
+    async function logout() {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login';
+    }
+    async function apiFetch(url, options = {}) {
+      const res = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
+      if (res.status === 401) { window.location.href = '/login'; throw new Error('unauthorized'); }
+      return res;
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

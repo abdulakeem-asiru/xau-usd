@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Log in — XAU/USD Bot{% endblock %}
+{% block content %}
+<div class="min-h-[80vh] flex items-center justify-center">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="text-2xl font-semibold text-amber-400">XAU/USD Bot</div>
+      <div class="text-sm text-neutral-500 mt-1">Sign in to the control dashboard</div>
+    </div>
+    <form id="login-form" class="bg-[#141922] border border-neutral-800 rounded-xl p-6 space-y-4">
+      <div>
+        <label class="block text-xs text-neutral-400 mb-1">Username</label>
+        <input name="username" type="text" required autocomplete="username"
+          class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm focus:outline-none focus:border-amber-500" />
+      </div>
+      <div>
+        <label class="block text-xs text-neutral-400 mb-1">Password</label>
+        <input name="password" type="password" required autocomplete="current-password"
+          class="w-full rounded-lg bg-[#0f1319] border border-neutral-700 px-3 py-2 text-sm focus:outline-none focus:border-amber-500" />
+      </div>
+      <p id="login-error" class="text-sm text-red-400 hidden"></p>
+      <button type="submit"
+        class="w-full rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-medium py-2 text-sm transition">
+        Sign in
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const errorEl = document.getElementById('login-error');
+    errorEl.classList.add('hidden');
+    const payload = { username: form.username.value, password: form.password.value };
+    const res = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      window.location.href = '/dashboard';
+    } else {
+      errorEl.textContent = 'Invalid username or password.';
+      errorEl.classList.remove('hidden');
+    }
+  });
+</script>
+{% endblock %}
