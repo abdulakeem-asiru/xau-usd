@@ -7,7 +7,7 @@ import pandas as pd
 from app.broker.interface import BrokerProtocol
 from app.broker.schemas import Candle
 from app.config import Settings
-from app.core.enums import CloseReason, TradeStatus
+from app.core.enums import BotMode, CloseReason, TradeStatus
 from app.db import crud
 from app.db.base import async_session_maker
 from app.engine import state
@@ -158,7 +158,12 @@ class TradingLoop:
                 open_positions_count=len(positions),
                 instrument=self.settings.instrument,
             )
-            result = await evaluate_and_maybe_trade(df, self.broker, ctx)
+            # `mode` is the operator's own live-trading confirmation (see app/api/live_gate.py) —
+            # nothing else in this loop checks it, so it must gate new-order placement here or
+            # "practice" mode would open real positions on whatever account is connected.
+            result = (
+                await evaluate_and_maybe_trade(df, self.broker, ctx) if config.mode == BotMode.LIVE else None
+            )
             if result is not None:
                 await crud.create_trade(
                     db,
