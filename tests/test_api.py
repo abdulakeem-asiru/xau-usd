@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from app.api import account, auth, backtest, bot_state, equity, kill_switch, live_gate, positions, risk_config, strategy_config, trades
+from app.api import account, auth, backtest, bot_state, equity, flip, kill_switch, live_gate, positions, risk_config, strategy_config, trades
 from app.broker.schemas import AccountSummary, SymbolSpecification
 from app.config import get_settings
 from app.core.enums import TradeStatus
@@ -20,7 +20,7 @@ def make_test_app(broker) -> FastAPI:
     app = FastAPI()
     for router in (
         auth.router, account.router, positions.router, trades.router, equity.router,
-        strategy_config.router, risk_config.router, bot_state.router, live_gate.router,
+        strategy_config.router, risk_config.router, flip.router, bot_state.router, live_gate.router,
         kill_switch.router, backtest.router,
     ):
         app.include_router(router)
@@ -106,6 +106,51 @@ async def test_risk_config_accepts_valid_values(auth_headers):
         )
         assert res.status_code == 200
         assert res.json()["risk_pct_per_trade"] == 1.5
+
+
+@pytest.mark.asyncio
+async def test_flip_config_defaults_to_off(auth_headers):
+    app = make_test_app(make_broker())
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.get("/api/config/flip", headers=auth_headers)
+        assert res.status_code == 200
+        body = res.json()
+        assert body["flip_mode"] is False
+        assert (body["flip_risk_pct"], body["flip_equity_floor"], body["flip_equity_target"]) == (10.0, 25.0, 100.0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"flip_risk_pct": 50},  # far past the 15% ceiling
+        {"flip_risk_pct": 0},
+        {"flip_equity_floor": 0},
+        {"flip_equity_floor": 60, "flip_equity_target": 60},  # target must be above the floor
+        {"flip_equity_floor": 60, "flip_equity_target": 40},
+    ],
+)
+async def test_flip_config_rejects_invalid_values(auth_headers, overrides):
+    app = make_test_app(make_broker())
+    payload = {"flip_mode": True, "flip_risk_pct": 10, "flip_equity_floor": 25, "flip_equity_target": 100, **overrides}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.put("/api/config/flip", headers=auth_headers, json=payload)
+        assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_flip_config_enable_persists_and_notifies_once(auth_headers):
+    app = make_test_app(make_broker())
+    payload = {"flip_mode": True, "flip_risk_pct": 8, "flip_equity_floor": 20, "flip_equity_target": 150}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.put("/api/config/flip", headers=auth_headers, json=payload)
+        assert res.status_code == 200
+        assert res.json()["flip_mode"] is True
+        # saving again while already on must not re-announce a new run
+        await client.put("/api/config/flip", headers=auth_headers, json=payload)
+        got = (await client.get("/api/config/flip", headers=auth_headers)).json()
+        assert (got["flip_risk_pct"], got["flip_equity_floor"], got["flip_equity_target"]) == (8.0, 20.0, 150.0)
+    app.state.notify.assert_awaited_once()
 
 
 @pytest.mark.asyncio

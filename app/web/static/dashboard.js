@@ -202,8 +202,52 @@ async function saveRiskConfig() {
   }
 }
 
+let flipInputsLoaded = false;
+
+async function refreshFlip() {
+  const res = await apiFetch('/api/config/flip');
+  const cfg = await res.json();
+  // Fill the inputs once only, so the 5s poll doesn't overwrite values being typed.
+  if (!flipInputsLoaded) {
+    document.getElementById('flip-risk-pct').value = cfg.flip_risk_pct;
+    document.getElementById('flip-floor').value = cfg.flip_equity_floor;
+    document.getElementById('flip-target').value = cfg.flip_equity_target;
+    flipInputsLoaded = true;
+  }
+  const banner = document.getElementById('flip-banner');
+  banner.classList.toggle('hidden', !cfg.flip_mode);
+  banner.textContent = `🎲 FLIP MODE ON — risking ${cfg.flip_risk_pct}% per trade; entries stop at $${fmt(cfg.flip_equity_floor)} (floor) or $${fmt(cfg.flip_equity_target)} (target).`
+    + (cfg.is_paused ? ' The bot is paused — press Resume to start trading.' : '');
+  const stateEl = document.getElementById('flip-state');
+  stateEl.textContent = cfg.flip_mode ? 'ON' : 'OFF';
+  stateEl.className = 'text-xs font-semibold ' + (cfg.flip_mode ? 'text-amber-400' : 'text-neutral-500');
+}
+
+async function saveFlipConfig(enable) {
+  const msg = document.getElementById('flip-save-msg');
+  const payload = {
+    flip_mode: enable,
+    flip_risk_pct: parseFloat(document.getElementById('flip-risk-pct').value),
+    flip_equity_floor: parseFloat(document.getElementById('flip-floor').value),
+    flip_equity_target: parseFloat(document.getElementById('flip-target').value),
+  };
+  if (enable && !confirm(
+    `Start a flip run?\n\nEach trade risks about ${payload.flip_risk_pct}% of equity (up to ${(payload.flip_risk_pct * 1.5).toFixed(1)}% when the minimum lot forces it). ` +
+    `You can lose the whole balance. New entries stop at $${payload.flip_equity_floor} or $${payload.flip_equity_target}.`)) return;
+  const res = await apiFetch('/api/config/flip', { method: 'PUT', body: JSON.stringify(payload) });
+  if (res.ok) {
+    msg.textContent = enable ? 'Flip mode on.' : 'Flip mode off.';
+    msg.className = 'text-xs text-green-400';
+    await refreshFlip();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    msg.textContent = (data.detail && JSON.stringify(data.detail)) || 'Failed to save.';
+    msg.className = 'text-xs text-red-400';
+  }
+}
+
 async function refreshAll() {
-  await Promise.all([refreshStatus(), refreshPositions(), refreshTrades(), refreshEquityChart()]);
+  await Promise.all([refreshStatus(), refreshPositions(), refreshTrades(), refreshEquityChart(), refreshFlip()]);
 }
 
 refreshAll();

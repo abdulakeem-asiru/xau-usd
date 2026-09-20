@@ -60,6 +60,10 @@ class BotConfig(Base):
     risk_pct_per_trade: Mapped[float] = mapped_column(Numeric, default=1.0, nullable=False)
     max_daily_loss_pct: Mapped[float] = mapped_column(Numeric, default=3.0, nullable=False)
     max_concurrent_positions: Mapped[int] = mapped_column(default=1, nullable=False)
+    flip_mode: Mapped[bool] = mapped_column(default=False, nullable=False)
+    flip_risk_pct: Mapped[float] = mapped_column(Numeric, default=10.0, nullable=False)
+    flip_equity_floor: Mapped[float] = mapped_column(Numeric, default=25.0, nullable=False)
+    flip_equity_target: Mapped[float] = mapped_column(Numeric, default=100.0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

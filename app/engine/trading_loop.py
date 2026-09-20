@@ -15,11 +15,22 @@ from app.engine.executor import RunContext, evaluate_and_maybe_trade
 from app.engine.position_manager import manage_open_positions
 from app.engine.state import Notifier
 from app.risk.circuit_breaker import CircuitBreaker, CircuitBreakerSnapshot
+from app.risk.flip import FlipSettings, FlipStatus, check_flip_status, flip_end_message
 from app.strategy.registry import get_strategy
 
 logger = logging.getLogger(__name__)
 
 MIN_CANDLES_FOR_STRATEGY = 60
+
+
+def _flip_settings(config) -> FlipSettings | None:
+    if not config.flip_mode:
+        return None
+    return FlipSettings(
+        risk_pct_per_trade=float(config.flip_risk_pct),
+        equity_floor=float(config.flip_equity_floor),
+        equity_target=float(config.flip_equity_target),
+    )
 
 
 def _candles_to_df(candles: list[Candle]) -> pd.DataFrame:
@@ -149,11 +160,24 @@ class TradingLoop:
             if any(o.action == "close" for o in outcomes):
                 positions = await self.broker.get_open_positions()
 
+            flip = _flip_settings(config)
+            flip_active = True
+            if flip is not None and not positions:
+                # Judged only while flat: equity then equals balance, so a trade's floating PnL
+                # can't trip the floor/target mid-trade, and pausing can't strand an open position
+                # (a paused tick skips position management entirely).
+                flip_equity = (await self.broker.get_account_summary()).equity
+                flip_status = check_flip_status(flip_equity, flip)
+                if flip_status is not FlipStatus.ACTIVE:
+                    flip_active = False
+                    await crud.update_bot_config(db, flip_mode=False, is_paused=True)
+                    await self.notify(flip_end_message(flip_status, flip_equity, flip))
+
             ctx = RunContext(
                 strategy=strategy,
                 circuit_breaker=breaker,
                 breaker_snapshot=snapshot,
-                risk_pct_per_trade=float(config.risk_pct_per_trade),
+                risk_pct_per_trade=flip.risk_pct_per_trade if flip is not None else float(config.risk_pct_per_trade),
                 max_concurrent_positions=config.max_concurrent_positions,
                 open_positions_count=len(positions),
                 instrument=self.settings.instrument,
@@ -162,7 +186,9 @@ class TradingLoop:
             # nothing else in this loop checks it, so it must gate new-order placement here or
             # "practice" mode would open real positions on whatever account is connected.
             result = (
-                await evaluate_and_maybe_trade(df, self.broker, ctx) if config.mode == BotMode.LIVE else None
+                await evaluate_and_maybe_trade(df, self.broker, ctx)
+                if config.mode == BotMode.LIVE and flip_active
+                else None
             )
             if result is not None:
                 await crud.create_trade(
